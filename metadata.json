@@ -1,0 +1,5 @@
+{
+  "name": "Moral Tales",
+  "description": "An AI-powered web app that generates custom illustrated storybooks for children, starring them and their pet as the main characters. Parents choose a moral value to teach, and the app crafts a unique adventure.",
+  "requestFramePermissions": []
+}
