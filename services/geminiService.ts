@@ -77,6 +77,46 @@ export const generateInitialImage = async (prompt: string): Promise<{ base64: st
     }
 };
 
+export const generateImageFromPhotos = async (
+    images: { data: string; mimeType: string }[],
+    prompt: string
+): Promise<{ base64: string; mimeType: string }> => {
+    const textPart = {
+        text: `${prompt}. Use the provided image(s) as a reference to create the characters in a whimsical, children's storybook art style. Ensure the characters are consistent with the reference photos.`
+    };
+
+    const imageParts = images.map(image => ({
+        inlineData: {
+            data: image.data,
+            mimeType: image.mimeType,
+        }
+    }));
+    
+    try {
+        const response: GenerateContentResponse = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image-preview',
+            contents: {
+                parts: [...imageParts, textPart],
+            },
+            config: {
+                responseModalities: [Modality.IMAGE, Modality.TEXT],
+            },
+        });
+
+        const imagePart = response.candidates?.[0]?.content?.parts.find(part => part.inlineData);
+        if (imagePart && imagePart.inlineData) {
+             return { base64: imagePart.inlineData.data, mimeType: imagePart.inlineData.mimeType };
+        } else {
+            throw new Error("No image was returned from the photo-based generation.");
+        }
+
+    } catch (error) {
+        console.error("Error generating image from photos:", error);
+        throw new Error("Failed to paint the first scene from your photos. Please try again.");
+    }
+};
+
+
 export const editImage = async (baseImageBase64: string, mimeType: string, prompt: string): Promise<{ base64: string; mimeType: string }> => {
     const editPrompt = `Following this instruction: "${prompt}", redraw the provided image while keeping the exact same art style and character designs.`;
     

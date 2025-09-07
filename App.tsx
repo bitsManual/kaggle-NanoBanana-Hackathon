@@ -6,12 +6,14 @@ import CharacterForm from './components/CharacterForm';
 import MoralSelector from './components/MoralSelector';
 import Loader from './components/Loader';
 import Storybook from './components/Storybook';
-import { generateStoryPlot, generateInitialImage, editImage } from './services/geminiService';
+import { generateStoryPlot, generateInitialImage, editImage, generateImageFromPhotos } from './services/geminiService';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.Setup);
   const [childName, setChildName] = useState('');
   const [petName, setPetName] = useState('');
+  const [childImage, setChildImage] = useState<{ base64: string; mimeType: string } | null>(null);
+  const [petImage, setPetImage] = useState<{ base64: string; mimeType: string } | null>(null);
   const [selectedMoral, setSelectedMoral] = useState<Moral>(MORALS[0]);
   const [generatedPages, setGeneratedPages] = useState<GeneratedPage[]>([]);
   const [loadingMessage, setLoadingMessage] = useState('');
@@ -21,10 +23,50 @@ const App: React.FC = () => {
     setAppState(AppState.Setup);
     setChildName('');
     setPetName('');
+    setChildImage(null);
+    setPetImage(null);
     setSelectedMoral(MORALS[0]);
     setGeneratedPages([]);
     setErrorMessage('');
   };
+  
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>, type: 'child' | 'pet') => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      setErrorMessage('Please upload a valid image file (JPEG or PNG).');
+      setAppState(AppState.Error);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        const base64String = reader.result as string;
+        const base64Data = base64String.split(',')[1];
+        const imageData = { base64: base64Data, mimeType: file.type };
+        if (type === 'child') {
+            setChildImage(imageData);
+        } else {
+            setPetImage(imageData);
+        }
+    };
+    reader.onerror = () => {
+        setErrorMessage('Failed to read the image file.');
+        setAppState(AppState.Error);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = ''; // Reset file input
+  };
+
+  const clearImage = (type: 'child' | 'pet') => {
+    if (type === 'child') {
+      setChildImage(null);
+    } else {
+      setPetImage(null);
+    }
+  };
+
 
   const handleGenerateStory = useCallback(async () => {
     if (!childName.trim() || !petName.trim()) {
@@ -45,7 +87,12 @@ const App: React.FC = () => {
       for (const storyPage of plot) {
         setLoadingMessage(`Illustrating page ${storyPage.page} of ${plot.length}...`);
         if (storyPage.page === 1) {
-          currentImage = await generateInitialImage(storyPage.imagePrompt);
+          if (childImage || petImage) {
+            const imageInputs = [childImage, petImage].filter(Boolean).map(img => ({ data: img!.base64, mimeType: img!.mimeType }));
+            currentImage = await generateImageFromPhotos(imageInputs, storyPage.imagePrompt);
+          } else {
+            currentImage = await generateInitialImage(storyPage.imagePrompt);
+          }
         } else if (currentImage) {
           currentImage = await editImage(currentImage.base64, currentImage.mimeType, storyPage.imagePrompt);
         }
@@ -67,7 +114,7 @@ const App: React.FC = () => {
       setErrorMessage(message);
       setAppState(AppState.Error);
     }
-  }, [childName, petName, selectedMoral]);
+  }, [childName, petName, selectedMoral, childImage, petImage]);
 
   const renderContent = () => {
     switch (appState) {
@@ -101,6 +148,10 @@ const App: React.FC = () => {
               setChildName={setChildName}
               petName={petName}
               setPetName={setPetName}
+              childImage={childImage ? `data:${childImage.mimeType};base64,${childImage.base64}` : null}
+              petImage={petImage ? `data:${petImage.mimeType};base64,${petImage.base64}` : null}
+              handleImageUpload={handleImageUpload}
+              clearImage={clearImage}
             />
             <MoralSelector selectedMoral={selectedMoral} setSelectedMoral={setSelectedMoral} />
             <button
